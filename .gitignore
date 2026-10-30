@@ -1,0 +1,15 @@
+# Angular
+angular-app/node_modules/
+angular-app/dist/
+angular-app/.angular/
+
+# Spring Boot
+springboot/app/target/
+
+# Fichiers de sauvegarde
+*.backup
+*.tar
+
+# Secrets et fichiers locaux
+.env
+.env.*
