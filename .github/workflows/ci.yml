@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Java
-        uses: actions/setup-java@v5        
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: temurin
@@ -49,3 +49,56 @@ jobs:
       - name: Build Spring Boot
         working-directory: springboot/app
         run: ./mvnw -B clean package -DskipTests
+
+  cd:
+    name: Deploy to local Kubernetes
+    runs-on: [self-hosted, Linux, X64]
+    needs: [angular-build, spring-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build Angular Docker image
+        run: sudo -n docker build -t angular-app:latest ./angular-app
+
+      - name: Build Spring Boot JAR
+        working-directory: springboot/app
+        run: ./mvnw -B clean package -DskipTests
+
+      - name: Build Spring Boot Docker image
+        run: sudo -n docker build -t springboot-app:latest ./springboot/app
+
+      - name: Save Docker images
+        run: |
+          sudo -n docker save -o "$RUNNER_TEMP/angular-app.tar" angular-app:latest
+          sudo -n docker save -o "$RUNNER_TEMP/springboot-app.tar" springboot-app:latest
+          sudo -n chown "$(id -u):$(id -g)" "$RUNNER_TEMP/angular-app.tar" "$RUNNER_TEMP/springboot-app.tar"
+
+      - name: Transfer images to worker
+        run: |
+          scp -i "$HOME/.ssh/github-runner-worker" \
+            "$RUNNER_TEMP/angular-app.tar" \
+            nourchene@192.168.56.102:/home/nourchene/
+
+          scp -i "$HOME/.ssh/github-runner-worker" \
+            "$RUNNER_TEMP/springboot-app.tar" \
+            nourchene@192.168.56.102:/home/nourchene/
+
+      - name: Import images on worker
+        run: |
+          ssh -i "$HOME/.ssh/github-runner-worker" nourchene@192.168.56.102 \
+            'sudo -n /usr/bin/ctr -n k8s.io images import /home/nourchene/angular-app.tar &&
+             sudo -n /usr/bin/ctr -n k8s.io images import /home/nourchene/springboot-app.tar &&
+             rm -f /home/nourchene/angular-app.tar /home/nourchene/springboot-app.tar'
+
+      - name: Restart Kubernetes applications
+        run: |
+          kubectl rollout restart deployment/angular-deployment
+          kubectl rollout restart deployment/spring-deployment
+
+      - name: Verify deployments
+        run: |
+          kubectl rollout status deployment/angular-deployment --timeout=180s
+          kubectl rollout status deployment/spring-deployment --timeout=180s
