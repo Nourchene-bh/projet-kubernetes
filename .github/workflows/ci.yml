@@ -1,0 +1,51 @@
+name: CI Angular and Spring Boot
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  angular-build:
+    name: Build Angular
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: angular-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: angular-app
+        run: npm ci
+
+      - name: Build Angular
+        working-directory: angular-app
+        run: npm run build
+
+  spring-build:
+    name: Build Spring Boot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Build Spring Boot
+        working-directory: springboot/app
+        run: ./mvnw -B clean package -DskipTests
